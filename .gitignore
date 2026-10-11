@@ -8,7 +8,10 @@ venv/
 # PyInstaller
 build/
 dist/
-*.spec
+
+# Icono generado por assets/make_icon.py
+assets/TeknoISO.ico
+assets/icono_preview.png
 
 # Sistemas
 .DS_Store

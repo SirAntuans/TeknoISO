@@ -42,14 +42,20 @@ Requiere Python 3.8+ con tkinter. En Linux se necesitan permisos de lectura de l
 
 ```bash
 pip install pyinstaller
-pyinstaller --onefile --windowed --name TeknoISO tekno_iso.py
+python assets/make_icon.py     # genera el icono assets/TeknoISO.ico
+pyinstaller TeknoISO.spec       # ejecutable de un solo archivo, con icono
 ```
 
-El ejecutable queda en la carpeta `dist/`. O simplemente publica una Release: GitHub Actions compila y adjunta el `.exe` automáticamente (ver `.github/workflows/build.yml`).
+El ejecutable queda en la carpeta `dist/`. El icono se genera con código puro de Python (sin herramientas de dibujo); ver `assets/make_icon.py`.
+
+O simplemente publica una Release: GitHub Actions genera el icono, compila y adjunta el `.exe` automáticamente (ver `.github/workflows/build.yml`).
 
 ## 🤝 Contribuir
 
-Las contribuciones son bienvenidas: errores, ideas y traducciones. Abre un *issue* o un *pull request*.
+Las contribuciones son bienvenidas: errores, ideas y traducciones.
+
+- ¿Encontraste un fallo? Abre un issue con la plantilla **🐞 Reporte de error**.
+- ¿Tienes una idea? Usa la plantilla **💡 Sugerencia de mejora**.
 
 ## 📄 Licencia
 

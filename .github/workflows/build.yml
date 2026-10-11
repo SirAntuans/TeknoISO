@@ -24,8 +24,11 @@ jobs:
       - name: Instalar PyInstaller
         run: pip install pyinstaller
 
+      - name: Generar icono
+        run: python assets/make_icon.py
+
       - name: Compilar TeknoISO.exe
-        run: pyinstaller --onefile --windowed --name TeknoISO tekno_iso.py
+        run: pyinstaller TeknoISO.spec
 
       - name: Empaquetar
         run: Compress-Archive -Path dist/TeknoISO.exe -DestinationPath TeknoISO-windows-x64.zip
