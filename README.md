@@ -21,7 +21,7 @@
 
 Descarga **TeknoISO-windows-x64.zip** desde [Releases](../../releases), descomprímelo y ejecuta `TeknoISO.exe`. No requiere instalación.
 
-> ⚠️ **Primera ejecución — «Windows protegió tu PC»: TeknoISO es freeware y su ejecutable no está firmado digitalmente (la firma de código tiene un costo anual elevado), así que Windows SmartScreen puede mostrar ese aviso la primera vez. Para continuar: **Más información → Ejecutar de todas formas**. Si prefieres no aceptar ese aviso, puedes compilar tu propio ejecutable desde el código fuente (ver «Compilar tu propio ejecutable», más abajo): el programa completo es un único archivo legible y auditable, tekno_iso.py.**
+> ⚠️ **Primera ejecución — «Windows protegió tu PC»**: TeknoISO es freeware y su ejecutable no está firmado digitalmente (la firma de código tiene un costo anual elevado), así que Windows SmartScreen puede mostrar ese aviso la primera vez. Para continuar: **Más información → Ejecutar de todas formas**. Si prefieres no aceptar ese aviso, puedes compilar tu propio ejecutable desde el código fuente (ver «Compilar tu propio ejecutable», más abajo): el programa completo es un único archivo legible y auditable, tekno_iso.py.
 
 ## 🖥️ Uso
 
