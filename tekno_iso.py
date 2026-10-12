@@ -9,6 +9,8 @@ Características:
 - Lee el disco sector a sector: el resultado es una imagen ISO/UDF válida
   (montable y grabable con cualquier software).
 - Reintenta lecturas fallidas y recupera los sectores finales uno a uno.
+- Ante sectores ilegibles (disco rayado), rellena con ceros y continua hasta
+  completar el disco, dejando un registro .log con los tramos dañados.
 - Verifica la completitud ISO 9660 del resultado: si falta solo lead-out
   o sectores no grabados, la imagen se declara completa.
 - Barra de progreso con porcentaje, velocidad y tiempo restante estimado.
@@ -219,6 +221,107 @@ def comprobar_iso9660(destino, leidos):
         return False
 
 
+CEROS_BLOQUE = b"\x00" * BLOQUE
+CEROS_SECTOR = b"\x00" * SECTOR
+
+
+def _recuperar_restante(descriptor, dst, digest, leidos, total, cola,
+                        evento_cancelar, inicio, errores_lectura, danados):
+    """Continúa el volcado sector a sector hasta `total`.
+
+    Los sectores ilegibles se rellenan con ceros y se registran en
+    `danados` como tuplas (offset, longitud). Tras 32 fallos seguidos
+    se deja de reintentar por sector y se sondea por bloques de 1 MiB
+    para no eternizarse en zonas muy dañadas.
+    Devuelve los bytes escritos acumulados.
+    """
+    consecutivos = 0
+    while leidos < total and not evento_cancelar.is_set():
+        try:
+            os.lseek(descriptor, leidos, os.SEEK_SET)
+        except OSError as e:
+            errores_lectura.append(e)
+            return leidos
+        if consecutivos >= 32:
+            tramo = min(BLOQUE, total - leidos)
+            datos, fallo = _leer_fd(descriptor, tramo, reintentos=1, pausa=0,
+                                    err=errores_lectura)
+            if fallo:
+                ceros = CEROS_BLOQUE[:tramo]
+                dst.write(ceros)
+                if digest:
+                    digest.update(ceros)
+                danados.append((leidos, tramo))
+                leidos += tramo
+            else:
+                consecutivos = 0
+                if datos:
+                    dst.write(datos)
+                    if digest:
+                        digest.update(datos)
+                    leidos += len(datos)
+                else:
+                    ceros = CEROS_BLOQUE[:tramo]
+                    dst.write(ceros)
+                    if digest:
+                        digest.update(ceros)
+                    danados.append((leidos, tramo))
+                    leidos += tramo
+        else:
+            sector, fallo_sector = _leer_fd(descriptor, SECTOR, reintentos=3,
+                                           pausa=0.1, err=errores_lectura)
+            if fallo_sector:
+                dst.write(CEROS_SECTOR)
+                if digest:
+                    digest.update(CEROS_SECTOR)
+                danados.append((leidos, SECTOR))
+                leidos += SECTOR
+                consecutivos += 1
+            elif sector:
+                dst.write(sector)
+                if digest:
+                    digest.update(sector)
+                leidos += len(sector)
+                consecutivos = 0
+            else:
+                resto = total - leidos
+                while resto > 0:
+                    tramo = min(BLOQUE, resto)
+                    ceros = CEROS_BLOQUE[:tramo]
+                    dst.write(ceros)
+                    if digest:
+                        digest.update(ceros)
+                    danados.append((leidos, tramo))
+                    leidos += tramo
+                    resto -= tramo
+                break
+        cola.put(("progreso", leidos, total,
+                  leidos / max(time.monotonic() - inicio, 1e-6)))
+    return leidos
+
+
+def _escribir_log_danados(destino, danados, total):
+    """Escribe junto al ISO la lista de tramos rellenados con ceros."""
+    with open(destino + ".log", "w", encoding="utf-8") as f:
+        f.write("TeknoISO — registro de tramos ilegibles\n")
+        f.write(f"Imagen: {destino} ({formato_bytes(total)})\n")
+        f.write(f"Fecha: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write("Los tramos siguientes no se pudieron leer y se rellenaron "
+                "con ceros; su contenido puede estar dañado.\n\n")
+        tramos = []
+        for offset, longitud in danados:
+            if tramos and offset == tramos[-1][0] + tramos[-1][1]:
+                tramos[-1] = (tramos[-1][0], tramos[-1][1] + longitud)
+            else:
+                tramos.append((offset, longitud))
+        for offset, longitud in tramos:
+            s_ini = offset // SECTOR
+            s_fin = (offset + longitud - 1) // SECTOR
+            rango = f"{s_ini}" if s_ini == s_fin else f"{s_ini}-{s_fin}"
+            f.write(f"sectores {rango}  ·  bytes {offset}-"
+                    f"{offset + longitud - 1}  ·  {formato_bytes(longitud)}\n")
+
+
 def volcar(origen, destino, total, cola, evento_cancelar, con_sha256):
     """Copia el dispositivo completo a un archivo ISO. Reporta progreso."""
     leidos = 0
@@ -227,6 +330,7 @@ def volcar(origen, destino, total, cola, evento_cancelar, con_sha256):
     ok = False
     mensaje = ""
     errores_lectura = []
+    danados = []
     try:
         descriptor = os.open(origen, os.O_RDONLY | getattr(os, "O_BINARY", 0))
         try:
@@ -238,24 +342,14 @@ def volcar(origen, destino, total, cola, evento_cancelar, con_sha256):
                     datos, fallo = _leer_fd(descriptor, a_leer,
                                             err=errores_lectura)
                     if fallo or not datos:
-                        # Fin de los datos o error de lectura: con tamaño
-                        # conocido, intentar recuperar sector a sector los
-                        # restantes antes de darse por vencido.
+                        # Error de lectura (o EOF prematuro): con tamaño
+                        # conocido, seguir sector a sector hasta el final
+                        # del disco, rellenando con ceros lo ilegible.
                         if total and leidos < total:
-                            for _ in range(64):            # hasta 128 KiB extra
-                                if evento_cancelar.is_set():
-                                    break
-                                sector, fallo_sector = _leer_fd(
-                                    descriptor, SECTOR, reintentos=3, pausa=0.1,
-                                    err=errores_lectura)
-                                if fallo_sector or not sector:
-                                    break
-                                dst.write(sector)
-                                if digest:
-                                    digest.update(sector)
-                                leidos += len(sector)
-                                cola.put(("progreso", leidos, total,
-                                          leidos / max(time.monotonic() - inicio, 1e-6)))
+                            leidos = _recuperar_restante(
+                                descriptor, dst, digest, leidos, total, cola,
+                                evento_cancelar, inicio, errores_lectura,
+                                danados)
                         break
                     dst.write(datos)
                     if digest:
@@ -278,11 +372,24 @@ def volcar(origen, destino, total, cola, evento_cancelar, con_sha256):
                            "restantes son de lead-out o no grabados: el sistema "
                            f"de archivos ISO 9660 está completo. Duración: {duracion}.")
             else:
-                faltan = formato_bytes(total - leidos)
                 detalle = f" — {errores_lectura[-1]}" if errores_lectura else ""
-                mensaje = (f"Atención: solo se copiaron {formato_bytes(leidos)} de "
-                           f"{formato_bytes(total)} ({faltan} ilegibles{detalle}). "
+                mensaje = (f"Error de lectura a {formato_bytes(leidos)} de "
+                           f"{formato_bytes(total)}{detalle} y no se pudo continuar. "
                            "La imagen quedó INCOMPLETA: limpia el disco o revisa la unidad.")
+        elif danados:
+            ok = True
+            duracion = formato_tiempo(time.monotonic() - inicio)
+            bytes_danados = sum(long for _, long in danados)
+            sectores = sum((long + SECTOR - 1) // SECTOR for _, long in danados)
+            try:
+                _escribir_log_danados(destino, danados, leidos)
+                log_nota = f"Detalle en «{os.path.basename(destino)}.log»."
+            except OSError:
+                log_nota = "No se pudo escribir el registro de tramos dañados."
+            mensaje = (f"Imagen creada: {formato_bytes(leidos)} en {duracion}, con "
+                       f"{formato_bytes(bytes_danados)} ({sectores} sectores) "
+                       "ilegibles rellenados con ceros. La imagen tiene el tamaño "
+                       f"completo, pero puede contener zonas dañadas. {log_nota}")
         else:
             ok = True
             duracion = formato_tiempo(time.monotonic() - inicio)
