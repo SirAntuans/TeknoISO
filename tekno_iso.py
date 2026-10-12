@@ -22,6 +22,7 @@ requieren extracción digital (CDDA), que es un proceso distinto.
 """
 
 import ctypes
+import errno
 import glob
 import hashlib
 import os
@@ -175,16 +176,23 @@ else:
 # Volcado del disco (hilo de trabajo)
 # --------------------------------------------------------------------------
 
-def _leer_fd(descriptor, cantidad, reintentos=3, pausa=0.25):
+def _leer_fd(descriptor, cantidad, reintentos=3, pausa=0.25, err=None):
     """Lee del descriptor con reintentos. Devuelve (datos, fallo).
 
     En medios ópticos una lectura puede fallar por un error puntual y
     tener éxito al reintentarla; por eso no nos rendimos a la primera.
+    Si se pasa una lista `err`, se deposita ahí el último OSError para
+    poder informarlo al usuario.
     """
     for intento in range(reintentos):
         try:
-            return os.read(descriptor, cantidad), False
-        except OSError:
+            datos = os.read(descriptor, cantidad)
+            return (datos or b""), False    # b"" = EOF limpio, no es error
+        except PermissionError:
+            raise                           # reintentar no ayuda
+        except OSError as e:
+            if err is not None:
+                err.append(e)
             if intento == reintentos - 1:
                 return None, True
             time.sleep(pausa)
@@ -218,6 +226,7 @@ def volcar(origen, destino, total, cola, evento_cancelar, con_sha256):
     inicio = time.monotonic()
     ok = False
     mensaje = ""
+    errores_lectura = []
     try:
         descriptor = os.open(origen, os.O_RDONLY | getattr(os, "O_BINARY", 0))
         try:
@@ -226,7 +235,8 @@ def volcar(origen, destino, total, cola, evento_cancelar, con_sha256):
                     if total and leidos >= total:
                         break
                     a_leer = BLOQUE if not total else min(BLOQUE, total - leidos)
-                    datos, fallo = _leer_fd(descriptor, a_leer)
+                    datos, fallo = _leer_fd(descriptor, a_leer,
+                                            err=errores_lectura)
                     if fallo or not datos:
                         # Fin de los datos o error de lectura: con tamaño
                         # conocido, intentar recuperar sector a sector los
@@ -236,7 +246,8 @@ def volcar(origen, destino, total, cola, evento_cancelar, con_sha256):
                                 if evento_cancelar.is_set():
                                     break
                                 sector, fallo_sector = _leer_fd(
-                                    descriptor, SECTOR, reintentos=3, pausa=0.1)
+                                    descriptor, SECTOR, reintentos=3, pausa=0.1,
+                                    err=errores_lectura)
                                 if fallo_sector or not sector:
                                     break
                                 dst.write(sector)
@@ -268,8 +279,9 @@ def volcar(origen, destino, total, cola, evento_cancelar, con_sha256):
                            f"de archivos ISO 9660 está completo. Duración: {duracion}.")
             else:
                 faltan = formato_bytes(total - leidos)
+                detalle = f" — {errores_lectura[-1]}" if errores_lectura else ""
                 mensaje = (f"Atención: solo se copiaron {formato_bytes(leidos)} de "
-                           f"{formato_bytes(total)} ({faltan} ilegibles). "
+                           f"{formato_bytes(total)} ({faltan} ilegibles{detalle}). "
                            "La imagen quedó INCOMPLETA: limpia el disco o revisa la unidad.")
         else:
             ok = True
@@ -279,7 +291,12 @@ def volcar(origen, destino, total, cola, evento_cancelar, con_sha256):
         mensaje = ("Sin permisos para leer la unidad. "
                    "En Linux ejecuta con sudo o añádete al grupo 'cdrom'.")
     except OSError as e:
-        mensaje = f"Error de lectura: ¿hay un disco insertado? ({e})"
+        if e.errno == errno.ENOSPC:
+            mensaje = ("Espacio insuficiente en el disco de destino mientras se "
+                       "escribía la imagen. Libera espacio e inténtalo de nuevo.")
+        else:
+            mensaje = (f"Error de E/S: {e}. Comprueba que hay un disco insertado "
+                       "y que la unidad responde.")
     except Exception as e:
         mensaje = f"Error inesperado: {e}"
     finally:
@@ -475,7 +492,8 @@ class Aplicacion:
     def _cancelar(self):
         if self.trabajando:
             self.cancelar.set()
-            self.var_estado.set("Cancelando…")
+            self.btn_cancelar.state(["disabled"])
+            self.var_estado.set("Cancelando… (se detendrá en unos segundos)")
 
     # ------------------------------------------------------- sondeo cola
 
