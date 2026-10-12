@@ -1,7 +1,7 @@
 # 📀 TeknoISO
 
 > Utilidad **freeware** para crear imágenes ISO a partir de discos CD/DVD.
-> Ligera, portable y fácil de usar. Desarrollada por **APSoft**.
+> Ligera, portable y fácil de usar. Desarrollada por **APSoft** — [apsoft.mx](https://apsoft.mx).
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![Licencia](https://img.shields.io/badge/Licencia-MIT-green)
@@ -62,6 +62,8 @@ Las contribuciones son bienvenidas: errores, ideas y traducciones.
 ## 📬 Contacto
 
 ¿Dudas, sugerencias o errores? Escríbeme: **[code@apsoft.mx](mailto:code@apsoft.mx)**
+
+🌐 Web: **[apsoft.mx](https://apsoft.mx)**
 
 ## 📄 Licencia
 

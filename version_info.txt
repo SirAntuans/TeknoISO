@@ -29,7 +29,7 @@ VSVersionInfo(
                         StringStruct('OriginalFilename', 'TeknoISO.exe'),
                         StringStruct('ProductName', 'TeknoISO'),
                         StringStruct('ProductVersion', '1.0.0'),
-                        StringStruct('Comments', 'Freeware · Contacto: code@apsoft.mx')
+                        StringStruct('Comments', 'Freeware · https://apsoft.mx · Contacto: code@apsoft.mx')
                     ]
                 )
             ]
