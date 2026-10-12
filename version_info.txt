@@ -1,0 +1,39 @@
+# UTF-8
+#
+# Metadatos de versión de Windows incrustados en TeknoISO.exe
+# (clic derecho sobre el .exe -> Propiedades -> Detalles).
+# PyInstaller lo procesa con eval(): debe ser sintaxis Python válida.
+
+VSVersionInfo(
+    ffi=FixedFileInfo(
+        filevers=(1, 0, 0, 0),
+        prodvers=(1, 0, 0, 0),
+        mask=0x3f,
+        flags=0x0,
+        OS=0x40004,
+        fileType=0x1,
+        subtype=0x0,
+        date=(0, 0)
+    ),
+    kids=[
+        StringFileInfo(
+            [
+                StringTable(
+                    '040904B0',
+                    [
+                        StringStruct('CompanyName', 'APSoft'),
+                        StringStruct('FileDescription', 'TeknoISO — Utilidad freeware para crear imágenes ISO de CD/DVD'),
+                        StringStruct('FileVersion', '1.0.0'),
+                        StringStruct('InternalName', 'TeknoISO'),
+                        StringStruct('LegalCopyright', '© 2026 Antonio Pulido (APSoft) — Licencia MIT'),
+                        StringStruct('OriginalFilename', 'TeknoISO.exe'),
+                        StringStruct('ProductName', 'TeknoISO'),
+                        StringStruct('ProductVersion', '1.0.0'),
+                        StringStruct('Comments', 'Freeware · Contacto: code@apsoft.mx')
+                    ]
+                )
+            ]
+        ),
+        VarFileInfo([VarStruct('Translation', [1033, 1200])])
+    ]
+)

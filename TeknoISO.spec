@@ -9,14 +9,20 @@ Compilar:
 
     pyinstaller TeknoISO.spec
 
-El ejecutable queda en dist/TeknoISO.exe.
+El ejecutable queda en dist/TeknoISO.exe, con icono propio y metadatos
+de versión de Windows (empresa, copyright y contacto) tomados de
+version_info.txt.
 """
 
 import os
 
 ICONO = os.path.join("assets", "TeknoISO.ico")
+VERSION = "version_info.txt"
+
 if not os.path.exists(ICONO):
     raise SystemExit("Falta assets/TeknoISO.ico — ejecuta primero: python assets/make_icon.py")
+if not os.path.exists(VERSION):
+    raise SystemExit("Falta version_info.txt (metadatos de versión de Windows)")
 
 a = Analysis(
     ["tekno_iso.py"],
@@ -53,4 +59,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=ICONO,
+    version=VERSION,
 )

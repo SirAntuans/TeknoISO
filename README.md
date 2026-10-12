@@ -59,6 +59,10 @@ Las contribuciones son bienvenidas: errores, ideas y traducciones.
 - ¿Encontraste un fallo? Abre un issue con la plantilla **🐞 Reporte de error**.
 - ¿Tienes una idea? Usa la plantilla **💡 Sugerencia de mejora**.
 
+## 📬 Contacto
+
+¿Dudas, sugerencias o errores? Escríbeme: **[code@apsoft.mx](mailto:code@apsoft.mx)**
+
 ## 📄 Licencia
 
 [MIT](LICENSE) — uso, modificación y distribución libres. Freeware.
