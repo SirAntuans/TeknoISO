@@ -13,6 +13,7 @@
 - **Sin dependencias**: solo biblioteca estándar de Python (tkinter y ctypes).
 - **Detección automática** de unidades de CD/DVD.
 - **Lectura sector a sector**: la imagen ISO/UDF resultante es válida, montable y grabable con cualquier software.
+- **Reintentos y verificación ISO 9660**: recupera sectores difíciles y valida que el volumen de datos quedó completo (el lead-out del disco no cuenta).
 - **Progreso en tiempo real**: porcentaje, velocidad y tiempo restante estimado.
 - **Suma SHA-256 opcional** para verificar copias idénticas.
 - **Ejecutable portable para Windows** compilado automáticamente en cada versión.

@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-TeknoISO 1.0 — Crea imágenes ISO a partir de discos CD/DVD (freeware).
+TeknoISO 1.0.1 — Crea imágenes ISO a partir de discos CD/DVD (freeware).
 
 Características:
 - Sin dependencias externas: solo biblioteca estándar de Python (tkinter, ctypes).
 - Detecta automáticamente las unidades ópticas del equipo.
 - Lee el disco sector a sector: el resultado es una imagen ISO/UDF válida
   (montable y grabable con cualquier software).
+- Reintenta lecturas fallidas y recupera los sectores finales uno a uno.
+- Verifica la completitud ISO 9660 del resultado: si falta solo lead-out
+  o sectores no grabados, la imagen se declara completa.
 - Barra de progreso con porcentaje, velocidad y tiempo restante estimado.
 - Suma de verificación SHA-256 opcional al vuelo.
 - Funciona en Windows (lectura en crudo \\\\.\\X:) y en Linux (/dev/srX).
@@ -172,6 +175,42 @@ else:
 # Volcado del disco (hilo de trabajo)
 # --------------------------------------------------------------------------
 
+def _leer_fd(descriptor, cantidad, reintentos=3, pausa=0.25):
+    """Lee del descriptor con reintentos. Devuelve (datos, fallo).
+
+    En medios ópticos una lectura puede fallar por un error puntual y
+    tener éxito al reintentarla; por eso no nos rendimos a la primera.
+    """
+    for intento in range(reintentos):
+        try:
+            return os.read(descriptor, cantidad), False
+        except OSError:
+            if intento == reintentos - 1:
+                return None, True
+            time.sleep(pausa)
+    return None, True
+
+
+def comprobar_iso9660(destino, leidos):
+    """True si la imagen captura el volumen ISO 9660 completo.
+
+    El descriptor de volumen primario (PVD) del sector 16 declara el
+    tamaño real del volumen de datos. Si ya se copió todo él, la
+    diferencia respecto al tamaño físico del disco son sectores de
+    lead-out o no grabados, que no forman parte de los datos.
+    """
+    try:
+        with open(destino, "rb") as f:
+            f.seek(16 * SECTOR)
+            pvd = f.read(SECTOR)
+        if len(pvd) < SECTOR or pvd[0:1] != b"\x01" or pvd[1:6] != b"CD001":
+            return False                                   # no es ISO 9660
+        tam_volumen = int.from_bytes(pvd[80:84], "little") * SECTOR
+        return leidos >= tam_volumen
+    except Exception:
+        return False
+
+
 def volcar(origen, destino, total, cola, evento_cancelar, con_sha256):
     """Copia el dispositivo completo a un archivo ISO. Reporta progreso."""
     leidos = 0
@@ -180,32 +219,58 @@ def volcar(origen, destino, total, cola, evento_cancelar, con_sha256):
     ok = False
     mensaje = ""
     try:
-        with open(origen, "rb") as src, open(destino, "wb") as dst:
-            while not evento_cancelar.is_set():
-                if total and leidos >= total:
-                    break
-                a_leer = BLOQUE if not total else min(BLOQUE, total - leidos)
-                try:
-                    datos = src.read(a_leer)
-                except OSError:
-                    if not total:
-                        break          # fin del medio con tamaño desconocido
-                    raise               # con tamaño conocido es error real
-                if not datos:
-                    break
-                dst.write(datos)
-                if digest:
-                    digest.update(datos)
-                leidos += len(datos)
-                transcurrido = max(time.monotonic() - inicio, 1e-6)
-                cola.put(("progreso", leidos, total, leidos / transcurrido))
+        descriptor = os.open(origen, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+        try:
+            with open(destino, "wb") as dst:
+                while not evento_cancelar.is_set():
+                    if total and leidos >= total:
+                        break
+                    a_leer = BLOQUE if not total else min(BLOQUE, total - leidos)
+                    datos, fallo = _leer_fd(descriptor, a_leer)
+                    if fallo or not datos:
+                        # Fin de los datos o error de lectura: con tamaño
+                        # conocido, intentar recuperar sector a sector los
+                        # restantes antes de darse por vencido.
+                        if total and leidos < total:
+                            for _ in range(64):            # hasta 128 KiB extra
+                                if evento_cancelar.is_set():
+                                    break
+                                sector, fallo_sector = _leer_fd(
+                                    descriptor, SECTOR, reintentos=3, pausa=0.1)
+                                if fallo_sector or not sector:
+                                    break
+                                dst.write(sector)
+                                if digest:
+                                    digest.update(sector)
+                                leidos += len(sector)
+                                cola.put(("progreso", leidos, total,
+                                          leidos / max(time.monotonic() - inicio, 1e-6)))
+                        break
+                    dst.write(datos)
+                    if digest:
+                        digest.update(datos)
+                    leidos += len(datos)
+                    transcurrido = max(time.monotonic() - inicio, 1e-6)
+                    cola.put(("progreso", leidos, total, leidos / transcurrido))
+        finally:
+            os.close(descriptor)
 
         if evento_cancelar.is_set():
             mensaje = ("Cancelado: la imagen quedó INCOMPLETA y no debe usarse. "
                        f"Se copiaron {formato_bytes(leidos)}.")
         elif total and leidos < total:
-            mensaje = (f"Atención: solo se copiaron {formato_bytes(leidos)} de "
-                       f"{formato_bytes(total)}. La imagen quedó INCOMPLETA.")
+            if comprobar_iso9660(destino, leidos):
+                ok = True
+                duracion = formato_tiempo(time.monotonic() - inicio)
+                mensaje = (f"Imagen creada: {formato_bytes(leidos)}. El disco "
+                           f"reporta {formato_bytes(total)}, pero los sectores "
+                           "restantes son de lead-out o no grabados: el sistema "
+                           f"de archivos ISO 9660 está completo. Duración: {duracion}.")
+            else:
+                faltan = formato_bytes(total - leidos)
+                mensaje = (f"Atención: solo se copiaron {formato_bytes(leidos)} de "
+                           f"{formato_bytes(total)} ({faltan} ilegibles). "
+                           "La imagen quedó INCOMPLETA: limpia el disco o revisa la unidad.")
         else:
             ok = True
             duracion = formato_tiempo(time.monotonic() - inicio)

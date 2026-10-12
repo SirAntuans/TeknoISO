@@ -6,8 +6,8 @@
 
 VSVersionInfo(
     ffi=FixedFileInfo(
-        filevers=(1, 0, 0, 0),
-        prodvers=(1, 0, 0, 0),
+        filevers=(1, 0, 1, 0),
+        prodvers=(1, 0, 1, 0),
         mask=0x3f,
         flags=0x0,
         OS=0x40004,
@@ -23,12 +23,12 @@ VSVersionInfo(
                     [
                         StringStruct('CompanyName', 'APSoft'),
                         StringStruct('FileDescription', 'TeknoISO — Utilidad freeware para crear imágenes ISO de CD/DVD'),
-                        StringStruct('FileVersion', '1.0.0'),
+                        StringStruct('FileVersion', '1.0.1'),
                         StringStruct('InternalName', 'TeknoISO'),
                         StringStruct('LegalCopyright', '© 2026 Antonio Pulido (APSoft) — Licencia MIT'),
                         StringStruct('OriginalFilename', 'TeknoISO.exe'),
                         StringStruct('ProductName', 'TeknoISO'),
-                        StringStruct('ProductVersion', '1.0.0'),
+                        StringStruct('ProductVersion', '1.0.1'),
                         StringStruct('Comments', 'Freeware · https://apsoft.mx · Contacto: code@apsoft.mx')
                     ]
                 )
