@@ -190,9 +190,10 @@ def _leer_fd(descriptor, cantidad, reintentos=3, pausa=0.25, err=None):
         try:
             datos = os.read(descriptor, cantidad)
             return (datos or b""), False    # b"" = EOF limpio, no es error
-        except PermissionError:
-            raise                           # reintentar no ayuda
         except OSError as e:
+            # Nota: en Windows una lectura cruda de un sector dañado puede
+            # llegar como PermissionError aunque no sea un problema real de
+            # permisos; se reintenta igual que cualquier otro error.
             if err is not None:
                 err.append(e)
             if intento == reintentos - 1:
@@ -395,8 +396,12 @@ def volcar(origen, destino, total, cola, evento_cancelar, con_sha256):
             duracion = formato_tiempo(time.monotonic() - inicio)
             mensaje = f"Imagen creada correctamente: {formato_bytes(leidos)} en {duracion}."
     except PermissionError:
-        mensaje = ("Sin permisos para leer la unidad. "
-                   "En Linux ejecuta con sudo o añádete al grupo 'cdrom'.")
+        if ES_WINDOWS:
+            mensaje = ("Acceso denegado a la unidad. Prueba a ejecutar como "
+                       "administrador o vuelve a insertar el disco.")
+        else:
+            mensaje = ("Sin permisos para leer la unidad. "
+                       "En Linux ejecuta con sudo o añádete al grupo 'cdrom'.")
     except OSError as e:
         if e.errno == errno.ENOSPC:
             mensaje = ("Espacio insuficiente en el disco de destino mientras se "
